@@ -1,0 +1,149 @@
+---
+---
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <title>Cursores AC7</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: #0b0e14; 
+            height: 100vh; 
+            width: 100vw; 
+            overflow: hidden; 
+            font-family: sans-serif; 
+            color: white;
+        }
+        #hud { 
+            position: fixed; 
+            top: 20px; 
+            left: 20px; 
+            z-index: 1000; 
+            display: flex; 
+            gap: 15px; 
+            pointer-events: none; 
+        }
+        .badge { 
+            background: rgba(30, 41, 59, 0.8); 
+            padding: 10px 20px; 
+            border-radius: 30px; 
+            border: 1px solid rgba(51, 65, 85, 0.5); 
+            font-size: 14px; 
+            backdrop-filter: blur(5px);
+        }
+        #pizarra {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div class="badge">Yo: <span id="my-name" style="font-weight:bold;">...</span></div>
+        <div class="badge">Conectados: <span id="num" style="font-weight:bold;">0</span></div>
+    </div>
+
+    <canvas id="pizarra"></canvas>
+
+    <script>
+        import { io } from "socket.io-client";
+        
+        const socket = io("http://localhost:4322");
+        const canvas = document.getElementById('pizarra') as HTMLCanvasElement;
+        const ctx = canvas.getContext('2d')!;
+        const numEl = document.getElementById('num')!;
+        const myNameEl = document.getElementById('my-name')!;
+        
+        const myName = "User-" + Math.floor(Math.random() * 999);
+        const myColor = `hsl(${Math.random() * 360}, 80%, 65%)`;
+        
+        myNameEl.textContent = myName;
+        myNameEl.style.color = myColor;
+
+        const others = new Map();
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drawAll();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function drawCursor(x: number, y: number, name: string, color: string) {
+            ctx.beginPath();
+            ctx.arc(x, y, 7, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            const textWidth = ctx.measureText(name).width;
+            const textHeight = 16;
+            const padding = 6;
+
+            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+            drawRoundedRect(ctx, x - textWidth / 2 - padding, y + 15, textWidth + padding * 2, textHeight, 5);
+            ctx.fill();
+
+            ctx.fillStyle = color;
+            ctx.fillText(name, x, y + 15 + (textHeight - 12) / 2);
+        }
+
+        function drawRoundedRect(ctx: any, x: number, y: number, width: number, height: number, radius: number) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        function drawAll() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            others.forEach(user => {
+                drawCursor(user.x, user.y, user.name, user.color);
+            });
+        }
+
+        socket.on("connect", () => {
+            socket.emit("register", { name: myName, color: myColor });
+        });
+
+        window.addEventListener("mousemove", (e) => {
+            socket.emit("move", { x: e.clientX, y: e.clientY });
+        });
+
+        socket.on("someone-moved", (user) => {
+            others.set(user.id, user);
+            drawAll();
+        });
+
+        socket.on("update-count", (n) => { 
+            numEl.textContent = n; 
+        });
+        
+        socket.on("someone-left", (id) => {
+            if(others.has(id)) {
+                others.delete(id);
+                drawAll();
+            }
+        });
+    </script>
+</body>
+</html>
